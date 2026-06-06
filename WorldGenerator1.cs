@@ -477,6 +477,9 @@ public class WorldGenerator1 : MonoBehaviour
         Vector3[] vertices = new Vector3[resolution * resolution];
         Color[] colors = new Color[resolution * resolution];
         Vector2[] uvs = new Vector2[resolution * resolution];
+        // Extra UV channels feed the terrain shader with non-visual biome metadata.
+        Vector2[] biomeData = new Vector2[resolution * resolution];
+        Vector2[] waterData = new Vector2[resolution * resolution];
         int[] triangles = new int[meshResolution * meshResolution * 6];
         float cellSize = (float)worldSize / meshResolution;
 
@@ -489,6 +492,9 @@ public class WorldGenerator1 : MonoBehaviour
                 vertices[index] = new Vector3(x * cellSize, height, y * cellSize);
                 uvs[index] = new Vector2((float)x / meshResolution, (float)y / meshResolution);
                 colors[index] = GetVertexColor(x, y);
+                // UV2: biome id + normalized height. UV3: river strength + ocean depth.
+                biomeData[index] = new Vector2((float)_biomeMap[x, y], _heightMap[x, y]);
+                waterData[index] = new Vector2(_riverMap[x, y], _oceanDepthMap[x, y]);
             }
         }
 
@@ -514,6 +520,8 @@ public class WorldGenerator1 : MonoBehaviour
         mesh.vertices = vertices;
         mesh.colors = colors;
         mesh.uv = uvs;
+        mesh.uv2 = biomeData;
+        mesh.uv3 = waterData;
         mesh.triangles = triangles;
         mesh.RecalculateNormals();
         mesh.RecalculateBounds();
