@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4ab616b66e0adf44f8e76bf6af57a21d, type: 3}
+  m_Name: BiomeTundra
+  m_EditorClassIdentifier: 
+  biomeType: 0
+  biomeName: 
+  groundColor: {r: 0.9, g: 0.95, b: 0, a: 1}
+  groundColorVariation: {r: 0.7, g: 0.8, b: 0.85, a: 1}
+  heightMultiplier: 1
+  roughness: 0.5
+  canSpawnTrees: 1
+  canSpawnRocks: 1
+  vegetationDensity: 0.5
+  temperatureRange: {x: 0.3, y: 0.7}
+  moistureRange: {x: 0.3, y: 0.7}
