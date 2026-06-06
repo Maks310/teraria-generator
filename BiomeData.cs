@@ -2,9 +2,14 @@ using UnityEngine;
 
 public enum BiomeType
 {
-    Plains,
-    Desert,
-    Tundra
+    Plains = 0,
+    Desert = 1,
+    Tundra = 2,
+    Ocean = 3,
+    Beach = 4,
+    Forest = 5,
+    Mountains = 6,
+    Snow = 7
 }
 
 [CreateAssetMenu(fileName = "BiomeData", menuName = "World/Biome Data")]
@@ -16,7 +21,7 @@ public class BiomeData : ScriptableObject
     public Color groundColorVariation = Color.green;
 
     [Header("Terrain Modifiers")]
-    [Range(0f, 1f)] public float heightMultiplier = 1f;
+    [Range(0f, 2f)] public float heightMultiplier = 1f;
     [Range(0f, 1f)] public float roughness = 0.5f;
 
     [Header("Object Spawning")]
