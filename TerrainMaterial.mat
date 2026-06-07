@@ -61,6 +61,8 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
+    - _BiomeBlendStrength: 1
+    - _BiomeBlendWidth: 0.08
     - _BumpScale: 1
     - _ColorIntensity: 1
     - _ColorMask: 15
@@ -69,7 +71,7 @@ Material:
     - _DetailScale: 0.22
     - _DetailStrength: 0.38
     - _DstBlend: 0
-    - _GlobalMetallic: 0
+    - _GlobalMetallic: 0.962
     - _GlobalSmoothness: 0.28
     - _GlossMapScale: 1
     - _Glossiness: 0.5
@@ -79,14 +81,11 @@ Material:
     - _OcclusionStrength: 1
     - _Parallax: 0.02
     - _RiverWetness: 0.55
-    - _BiomeBlendStrength: 1
-    - _BiomeBlendWidth: 0.08
-    - _WaterLevel: 0.34
-    - _SnowHeight: 0.76
     - _Shininess: 0.078125
     - _SlopeRockBlend: 0.26
     - _SlopeRockStart: 0.48
     - _SmoothnessTextureChannel: 0
+    - _SnowHeight: 0.76
     - _SpecularHighlights: 1
     - _SrcBlend: 1
     - _Stencil: 0
@@ -97,6 +96,7 @@ Material:
     - _TintStrength: 0.78
     - _UVSec: 0
     - _UseUIAlphaClip: 0
+    - _WaterLevel: 0.34
     - _ZWrite: 1
     m_Colors:
     - _BeachColorA: {r: 0.78, g: 0.69, b: 0.45, a: 1}

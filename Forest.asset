@@ -14,11 +14,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   biomeType: 5
   biomeName: 
-  groundColor: {r: 0, g: 1, b: 0, a: 1}
-  groundColorVariation: {r: 0, g: 1, b: 0, a: 1}
+  groundColor: {r: 0.08, g: 0.3, b: 0.11, a: 1}
+  groundColorVariation: {r: 0.17, g: 0.22, b: 0.1, a: 1}
   heightMultiplier: 1
   roughness: 0.5
-  canSpawnTrees: 1
+  canSpawnTrees: 0
   canSpawnRocks: 1
   vegetationDensity: 0.5
   temperatureRange: {x: 0.3, y: 0.7}

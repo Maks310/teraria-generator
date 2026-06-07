@@ -14,8 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   biomeType: 1
   biomeName: 
-  groundColor: {r: 0, g: 1, b: 0, a: 1}
-  groundColorVariation: {r: 0, g: 1, b: 0, a: 1}
+  groundColor: {r: 0.83, g: 0.69, b: 0.38, a: 1}
+  groundColorVariation: {r: 0.98, g: 0.86, b: 0.55, a: 1}
   heightMultiplier: 1
   roughness: 0.5
   canSpawnTrees: 1
