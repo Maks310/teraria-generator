@@ -9,15 +9,15 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4ab616b66e0adf44f8e76bf6af57a21d, type: 3}
-  m_Name: BiomePlains
+  m_Script: {fileID: 11500000, guid: 21cf7de84b0e3fb4fbaf9b65b7f85b83, type: 3}
+  m_Name: Mountains
   m_EditorClassIdentifier: 
-  biomeType: 0
+  biomeType: 6
   biomeName: 
-  groundColor: {r: 0.3, g: 0.6, b: 0.2, a: 1}
-  groundColorVariation: {r: 0.2, g: 0.5, b: 0.15, a: 1}
-  heightMultiplier: 0.8
-  roughness: 0.3
+  groundColor: {r: 0, g: 1, b: 0, a: 1}
+  groundColorVariation: {r: 0, g: 1, b: 0, a: 1}
+  heightMultiplier: 1
+  roughness: 0.5
   canSpawnTrees: 1
   canSpawnRocks: 1
   vegetationDensity: 0.5
