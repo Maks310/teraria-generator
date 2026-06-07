@@ -9,6 +9,10 @@ Shader "Custom/TerrainBiome"
         _SlopeRockStart ("Slope Rock Start", Range(0, 1)) = 0.48
         _SlopeRockBlend ("Slope Rock Blend", Range(0.01, 1)) = 0.26
         _RiverWetness ("River Wetness", Range(0, 1)) = 0.55
+        _BiomeBlendStrength ("Smooth Biome Blend Strength", Range(0, 1)) = 1
+        _BiomeBlendWidth ("Biome Blend Width", Range(0.005, 0.2)) = 0.08
+        _WaterLevel ("Water Level", Range(0, 1)) = 0.34
+        _SnowHeight ("Snow Height", Range(0, 1)) = 0.76
         _GlobalSmoothness ("Global Smoothness", Range(0, 1)) = 0.28
         _GlobalMetallic ("Global Metallic", Range(0, 1)) = 0.0
 
@@ -48,6 +52,10 @@ Shader "Custom/TerrainBiome"
         float _SlopeRockStart;
         float _SlopeRockBlend;
         float _RiverWetness;
+        float _BiomeBlendStrength;
+        float _BiomeBlendWidth;
+        float _WaterLevel;
+        float _SnowHeight;
         half _GlobalSmoothness;
         half _GlobalMetallic;
 
@@ -77,6 +85,7 @@ Shader "Custom/TerrainBiome"
             float3 worldNormal;
             float2 biomeData;
             float2 waterData;
+            float2 climateData;
         };
 
         float Hash21(float2 p)
@@ -123,6 +132,7 @@ Shader "Custom/TerrainBiome"
             o.vertexColor = v.color;
             o.biomeData = v.texcoord1.xy;
             o.waterData = v.texcoord2.xy;
+            o.climateData = v.texcoord3.xy;
         }
 
         fixed3 GetBiomePalette(float biomeId, float2 worldXZ, float noiseValue, float height01)
@@ -172,6 +182,56 @@ Shader "Custom/TerrainBiome"
             return lerp(_PlainsColorA.rgb, _PlainsColorB.rgb, smoothstep(0.2, 0.9, noiseValue));
         }
 
+        float SoftBelow(float value, float edge, float width)
+        {
+            return 1.0 - smoothstep(edge - width, edge + width, value);
+        }
+
+        float SoftAbove(float value, float edge, float width)
+        {
+            return smoothstep(edge - width, edge + width, value);
+        }
+
+        fixed3 GetSmoothBiomePalette(float2 worldXZ, float noiseValue, float fineNoise, float height01, float temperature, float moisture, float oceanDepth)
+        {
+            float width = max(_BiomeBlendWidth, 0.001);
+            float land = SoftAbove(height01, _WaterLevel, width);
+            float beach = land * SoftBelow(height01, _WaterLevel + 0.055, width * 0.8);
+            float highland = land * (1.0 - beach) * smoothstep(0.60, 0.74, height01);
+            float cold = SoftBelow(temperature, 0.38, width * 1.8);
+            float hot = SoftAbove(temperature, 0.62, width * 1.8);
+            float dry = SoftBelow(moisture, 0.38, width * 1.8);
+            float wet = SoftAbove(moisture, 0.58, width * 1.8);
+
+            float snowWeight = highland * SoftAbove(height01, _SnowHeight, width) * SoftBelow(temperature, 0.55, width * 1.5);
+            float mountainWeight = highland * (1.0 - snowWeight);
+            float climateLand = land * (1.0 - beach) * (1.0 - saturate(highland));
+            float tundraWeight = climateLand * cold;
+            float desertWeight = climateLand * hot * dry;
+            float forestWeight = climateLand * wet * (1.0 - desertWeight);
+            float oceanWeight = 1.0 - land;
+            float plainsWeight = max(0.02 * land, climateLand * (1.0 - saturate(tundraWeight + desertWeight + forestWeight)));
+
+            fixed3 plains = GetBiomePalette(0.0, worldXZ, noiseValue, height01);
+            fixed3 desert = GetBiomePalette(1.0, worldXZ, noiseValue, height01);
+            fixed3 tundra = GetBiomePalette(2.0, worldXZ, noiseValue, height01);
+            fixed3 ocean = GetBiomePalette(3.0, worldXZ, noiseValue, oceanDepth);
+            fixed3 beachColor = GetBiomePalette(4.0, worldXZ, noiseValue, height01);
+            fixed3 forest = GetBiomePalette(5.0, worldXZ, noiseValue, height01);
+            fixed3 mountain = GetBiomePalette(6.0, worldXZ, fineNoise, height01);
+            fixed3 snow = GetBiomePalette(7.0, worldXZ, noiseValue, height01);
+
+            float total = plainsWeight + desertWeight + tundraWeight + oceanWeight + beach + forestWeight + mountainWeight + snowWeight;
+            return (plains * plainsWeight +
+                    desert * desertWeight +
+                    tundra * tundraWeight +
+                    ocean * oceanWeight +
+                    beachColor * beach +
+                    forest * forestWeight +
+                    mountain * mountainWeight +
+                    snow * snowWeight) / max(total, 0.0001);
+        }
+
         void surf(Input IN, inout SurfaceOutputStandard o)
         {
             float2 worldXZ = IN.worldPos.xz;
@@ -182,7 +242,9 @@ Shader "Custom/TerrainBiome"
             float river = saturate(IN.waterData.x);
             float oceanDepth = saturate(IN.waterData.y);
 
-            fixed3 proceduralColor = GetBiomePalette(biomeId, worldXZ, noiseValue, lerp(height01, oceanDepth, step(2.5, biomeId) * step(biomeId, 3.5)));
+            fixed3 hardBiomeColor = GetBiomePalette(biomeId, worldXZ, noiseValue, lerp(height01, oceanDepth, step(2.5, biomeId) * step(biomeId, 3.5)));
+            fixed3 smoothBiomeColor = GetSmoothBiomePalette(worldXZ, noiseValue, fineNoise, height01, saturate(IN.climateData.x), saturate(IN.climateData.y), oceanDepth);
+            fixed3 proceduralColor = lerp(hardBiomeColor, smoothBiomeColor, _BiomeBlendStrength);
             fixed3 vertexTint = max(IN.vertexColor.rgb, 0.001);
             fixed3 detailTex = tex2D(_MainTex, IN.uv_MainTex * 96.0).rgb;
 
@@ -193,7 +255,8 @@ Shader "Custom/TerrainBiome"
             fixed3 color = lerp(proceduralColor, proceduralColor * vertexTint * 1.35, _TintStrength);
             color *= lerp(1.0 - _DetailStrength * 0.45, 1.0 + _DetailStrength * 0.35, fineNoise);
             color *= lerp(1.0, detailTex * 1.15, _DetailStrength * 0.35);
-            color = lerp(color, slopeRock, rockMask * step(0.5, biomeId) * (1.0 - step(6.5, biomeId)));
+            float slopeLandMask = smoothstep(_WaterLevel - _BiomeBlendWidth, _WaterLevel + _BiomeBlendWidth, height01) * (1.0 - oceanDepth);
+            color = lerp(color, slopeRock, rockMask * slopeLandMask);
             color = lerp(color, _RiverColor.rgb, smoothstep(0.04, 0.85, river) * _RiverWetness);
 
             o.Albedo = saturate(color);

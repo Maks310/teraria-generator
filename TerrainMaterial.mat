@@ -79,6 +79,10 @@ Material:
     - _OcclusionStrength: 1
     - _Parallax: 0.02
     - _RiverWetness: 0.55
+    - _BiomeBlendStrength: 1
+    - _BiomeBlendWidth: 0.08
+    - _WaterLevel: 0.34
+    - _SnowHeight: 0.76
     - _Shininess: 0.078125
     - _SlopeRockBlend: 0.26
     - _SlopeRockStart: 0.48
