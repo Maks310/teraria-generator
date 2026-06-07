@@ -8,77 +8,74 @@ public static class NoiseGenerator
     }
 
     /// <summary>
-    /// Seamless pseudo-4D Perlin noise via toroidal sin/cos mapping.
-    /// Coordinates are expected in [0, 1], but wrapping is applied defensively.
+    /// Seamless noise on a torus. x/y are normalized world coordinates, so x=0 equals x=1 and y=0 equals y=1.
     /// </summary>
     public static float SeamlessPerlin(float x, float y, float scale, int seed)
     {
         x = Repeat01(x);
         y = Repeat01(y);
+        scale = Mathf.Max(0.0001f, scale);
 
-        float nx = x * Mathf.Max(0.0001f, scale);
-        float ny = y * Mathf.Max(0.0001f, scale);
+        float angleX = x * Mathf.PI * 2f;
+        float angleY = y * Mathf.PI * 2f;
+        float circleX = Mathf.Cos(angleX) * scale;
+        float circleY = Mathf.Sin(angleX) * scale;
+        float circleZ = Mathf.Cos(angleY) * scale;
+        float circleW = Mathf.Sin(angleY) * scale;
+        float offset = seed * 19.191f;
 
-        float angleX = nx * Mathf.PI * 2f;
-        float angleY = ny * Mathf.PI * 2f;
-
-        float x1 = Mathf.Cos(angleX);
-        float y1 = Mathf.Sin(angleX);
-        float x2 = Mathf.Cos(angleY);
-        float y2 = Mathf.Sin(angleY);
-
-        float seedOffset = seed * 37.719f;
-        float n1 = Mathf.PerlinNoise(x1 + seedOffset, y1 - seedOffset);
-        float n2 = Mathf.PerlinNoise(x2 - seedOffset + 101.3f, y2 + seedOffset + 17.7f);
-        float n3 = Mathf.PerlinNoise(x1 + x2 + seedOffset * 0.37f, y1 + y2 - seedOffset * 0.29f);
-        float n4 = Mathf.PerlinNoise(x1 - y2 + seedOffset * 0.11f, y1 + x2 + seedOffset * 0.13f);
-
-        return Mathf.Clamp01((n1 + n2 + n3 + n4) * 0.25f);
+        float a = Mathf.PerlinNoise(circleX + offset, circleZ - offset);
+        float b = Mathf.PerlinNoise(circleY - offset * 0.37f, circleW + offset * 0.61f);
+        float c = Mathf.PerlinNoise(circleX + circleZ + offset * 0.13f, circleY + circleW - offset * 0.17f);
+        float d = Mathf.PerlinNoise(circleX - circleW + offset * 0.71f, circleZ + circleY + offset * 0.29f);
+        return Mathf.Clamp01((a + b + c + d) * 0.25f);
     }
 
     public static float SeamlessOctavePerlin(float x, float y, int octaves, float persistence, float lacunarity, float scale, int seed)
     {
-        float total = 0f;
-        float frequency = 1f;
-        float amplitude = 1f;
-        float maxValue = 0f;
-
         octaves = Mathf.Max(1, octaves);
         persistence = Mathf.Clamp01(persistence);
         lacunarity = Mathf.Max(1.01f, lacunarity);
 
+        float total = 0f;
+        float amplitude = 1f;
+        float frequency = 1f;
+        float maxValue = 0f;
+
         for (int i = 0; i < octaves; i++)
         {
-            total += SeamlessPerlin(x, y, scale * frequency, seed + i * 53) * amplitude;
+            total += SeamlessPerlin(x, y, scale * frequency, seed + i * 97) * amplitude;
             maxValue += amplitude;
             amplitude *= persistence;
             frequency *= lacunarity;
         }
 
-        return maxValue <= 0f ? 0f : total / maxValue;
+        return maxValue <= 0f ? 0f : Mathf.Clamp01(total / maxValue);
     }
 
     public static float RidgedSeamlessPerlin(float x, float y, float scale, int seed)
     {
-        float noise = SeamlessPerlin(x, y, scale, seed);
-        return 1f - Mathf.Abs(noise * 2f - 1f);
+        float n = SeamlessPerlin(x, y, scale, seed);
+        return 1f - Mathf.Abs(n * 2f - 1f);
     }
 
     public static float RidgedOctavePerlin(float x, float y, int octaves, float persistence, float lacunarity, float scale, int seed)
     {
-        float total = 0f;
-        float frequency = 1f;
-        float amplitude = 1f;
-        float maxValue = 0f;
-
         octaves = Mathf.Max(1, octaves);
+        persistence = Mathf.Clamp01(persistence);
+        lacunarity = Mathf.Max(1.01f, lacunarity);
+
+        float total = 0f;
+        float amplitude = 1f;
+        float frequency = 1f;
+        float maxValue = 0f;
 
         for (int i = 0; i < octaves; i++)
         {
-            total += RidgedSeamlessPerlin(x, y, scale * frequency, seed + i * 79) * amplitude;
+            total += RidgedSeamlessPerlin(x, y, scale * frequency, seed + i * 131) * amplitude;
             maxValue += amplitude;
-            amplitude *= Mathf.Clamp01(persistence);
-            frequency *= Mathf.Max(1.01f, lacunarity);
+            amplitude *= persistence;
+            frequency *= lacunarity;
         }
 
         return maxValue <= 0f ? 0f : Mathf.Clamp01(total / maxValue);
@@ -92,13 +89,13 @@ public static class NoiseGenerator
         }
 
         float warpX = SeamlessOctavePerlin(x, y, 3, 0.5f, 2f, scale, seed) - 0.5f;
-        float warpY = SeamlessOctavePerlin(x, y, 3, 0.5f, 2f, scale, seed + 997) - 0.5f;
+        float warpY = SeamlessOctavePerlin(x, y, 3, 0.5f, 2f, scale, seed + 1009) - 0.5f;
         return new Vector2(Repeat01(x + warpX * strength), Repeat01(y + warpY * strength));
     }
 
     public static float SmoothStep(float edge0, float edge1, float value)
     {
-        float t = Mathf.Clamp01((value - edge0) / Mathf.Max(0.0001f, edge1 - edge0));
+        float t = Mathf.Clamp01((value - edge0) / Mathf.Max(0.00001f, edge1 - edge0));
         return t * t * (3f - 2f * t);
     }
 

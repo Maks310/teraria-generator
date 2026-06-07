@@ -1,21 +1,23 @@
-Shader "Custom/Water"
+Shader "Custom/SeamlessSurvivalWater"
 {
     Properties
     {
-        _Color ("Water Color", Color) = (0.1, 0.4, 0.6, 0.8)
-        _DeepColor ("Deep Water Color", Color) = (0.02, 0.1, 0.2, 0.9)
+        _Color ("Shallow Color", Color) = (0.08, 0.40, 0.44, 0.72)
+        _DeepColor ("Deep Color", Color) = (0.02, 0.08, 0.16, 0.86)
         _WaveOffset ("Wave Offset", Float) = 0
-        _WaveScale ("Wave Scale", Float) = 0.1
-        _WaveHeight ("Wave Height", Float) = 0.5
-        _Glossiness ("Smoothness", Range(0,1)) = 0.9
-        _Metallic ("Metallic", Range(0,1)) = 0.0
-        _FresnelPower ("Fresnel Power", Range(1, 10)) = 3
+        _WaveScale ("Wave Count", Float) = 6
+        _WaveHeight ("Wave Height", Float) = 0.45
+        _WorldSize ("World Size", Float) = 2048
+        _FoamStrength ("Foam Strength", Range(0,1)) = 0.16
+        _Glossiness ("Smoothness", Range(0,1)) = 0.86
+        _Metallic ("Metallic", Range(0,1)) = 0
+        _FresnelPower ("Fresnel Power", Range(1,10)) = 4
     }
 
     SubShader
     {
         Tags { "RenderType"="Transparent" "Queue"="Transparent" }
-        LOD 200
+        LOD 250
         Cull Off
         Blend SrcAlpha OneMinusSrcAlpha
         ZWrite Off
@@ -29,6 +31,8 @@ Shader "Custom/Water"
         float _WaveOffset;
         float _WaveScale;
         float _WaveHeight;
+        float _WorldSize;
+        float _FoamStrength;
         half _Glossiness;
         half _Metallic;
         half _FresnelPower;
@@ -40,33 +44,35 @@ Shader "Custom/Water"
             float3 worldNormal;
         };
 
+        float SeamlessWave(float2 worldXZ, float phase)
+        {
+            float2 angle = worldXZ / max(_WorldSize, 1.0) * 6.2831853;
+            float a = sin(angle.x * _WaveScale + phase) * cos(angle.y * (_WaveScale * 0.7) + phase * 0.8);
+            float b = sin(angle.x * (_WaveScale * 1.7) - phase * 1.1) * cos(angle.y * (_WaveScale * 1.3) + phase);
+            return a + b * 0.5;
+        }
+
         void vert(inout appdata_full v, out Input o)
         {
             UNITY_INITIALIZE_OUTPUT(Input, o);
-
-            // Анімація хвиль у вершинному шейдері
             float3 worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+            float wave = SeamlessWave(worldPos.xz, _WaveOffset);
+            v.vertex.y += wave * _WaveHeight;
 
-            float wave1 = sin(worldPos.x * _WaveScale + _WaveOffset) *
-                          cos(worldPos.z * _WaveScale * 0.7 + _WaveOffset * 0.8);
-            float wave2 = sin(worldPos.x * _WaveScale * 1.3 + _WaveOffset * 1.2) *
-                          cos(worldPos.z * _WaveScale * 1.1 + _WaveOffset);
-
-            v.vertex.y += (wave1 + wave2 * 0.5) * _WaveHeight;
-
-            // Оновлюємо нормалі для правильного освітлення
-            float dx = cos(worldPos.x * _WaveScale + _WaveOffset) * _WaveScale * _WaveHeight;
-            float dz = -sin(worldPos.z * _WaveScale * 0.7 + _WaveOffset * 0.8) * _WaveScale * 0.7 * _WaveHeight;
+            float eps = max(_WorldSize / 512.0, 0.25);
+            float waveX = SeamlessWave(worldPos.xz + float2(eps, 0), _WaveOffset);
+            float waveZ = SeamlessWave(worldPos.xz + float2(0, eps), _WaveOffset);
+            float dx = (waveX - wave) * _WaveHeight / eps;
+            float dz = (waveZ - wave) * _WaveHeight / eps;
             v.normal = normalize(float3(-dx, 1, -dz));
         }
 
         void surf(Input IN, inout SurfaceOutputStandard o)
         {
-            // Fresnel для реалістичності
-            float fresnel = pow(1.0 - saturate(dot(IN.viewDir, IN.worldNormal)), _FresnelPower);
-
-            // Колір залежно від кута огляду
-            fixed4 finalColor = lerp(_DeepColor, _Color, fresnel);
+            float fresnel = pow(1.0 - saturate(dot(normalize(IN.viewDir), normalize(IN.worldNormal))), _FresnelPower);
+            float ripple = SeamlessWave(IN.worldPos.xz, _WaveOffset * 1.35) * 0.5 + 0.5;
+            fixed4 finalColor = lerp(_DeepColor, _Color, saturate(fresnel + ripple * 0.18));
+            finalColor.rgb += ripple * _FoamStrength;
 
             o.Albedo = finalColor.rgb;
             o.Metallic = _Metallic;
