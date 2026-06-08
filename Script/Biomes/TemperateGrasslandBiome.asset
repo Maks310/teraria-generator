@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 99310c30550b44c8a36add1c8da4b2d0, type: 3}
+  m_Name: TemperateGrasslandBiome
+  m_EditorClassIdentifier: 
+  biomeName: Temperate Grassland
+  minimumTemperature: 0.35
+  maximumTemperature: 0.82
+  minimumMoisture: 0.28
+  maximumMoisture: 0.78
+  minimumHeight: 0.2
+  maximumHeight: 0.72
+  albedoTexture: {fileID: 0}
+  normalTexture: {fileID: 0}
+  tint: {r: 0.28, g: 0.48, b: 0.18, a: 1}
+  smoothness: 0.25
+  textureScale: 12
+  rainChance: 0.38
+  stormChance: 0.08
+  fogChance: 0.12
+  windStrength: 4
+  averageTemperature: 16

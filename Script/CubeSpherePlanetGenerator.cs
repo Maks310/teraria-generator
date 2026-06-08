@@ -13,6 +13,7 @@ namespace TerariaGenerator.Planets
         private readonly List<GameObject> generatedObjects = new List<GameObject>();
         private float[,,] heights;
         private bool[,,] rivers;
+        private ClimateMaps climateMaps;
         private int faceResolution;
 
         public PlanetSettings Settings
@@ -20,6 +21,10 @@ namespace TerariaGenerator.Planets
             get => settings;
             set => settings = value;
         }
+
+        public float[,,] HeightMap => climateMaps?.height;
+        public float[,,] TemperatureMap => climateMaps?.temperature;
+        public float[,,] MoistureMap => climateMaps?.moisture;
 
         private void Start()
         {
@@ -47,6 +52,7 @@ namespace TerariaGenerator.Planets
             heights = new float[6, faceResolution, faceResolution];
             BuildHeightMap();
             rivers = new RiverNetwork(settings, faceResolution, heights).Generate();
+            climateMaps = ClimateMaps.Generate(settings, faceResolution, heights, rivers);
 
             for (int face = 0; face < 6; face++)
             for (int cx = 0; cx < settings.chunksPerFace; cx++)
@@ -105,6 +111,8 @@ namespace TerariaGenerator.Planets
             Vector3[] vertices = new Vector3[(resolution + 1) * (resolution + 1)];
             Vector3[] normals = new Vector3[vertices.Length];
             Vector2[] uvs = new Vector2[vertices.Length];
+            List<Vector4> climateUvs = new List<Vector4>(vertices.Length);
+            List<Vector4> biomeUvs = new List<Vector4>(vertices.Length);
             Color[] colors = new Color[vertices.Length];
             int[] triangles = new int[resolution * resolution * 6];
 
@@ -122,6 +130,8 @@ namespace TerariaGenerator.Planets
                 normals[index] = normal;
                 uvs[index] = new Vector2(u, v);
                 colors[index] = EncodeVertexData(height, normal, face, globalX, globalY);
+                climateUvs.Add(EncodeClimateData(face, globalX, globalY));
+                biomeUvs.Add(climateMaps != null ? climateMaps.biomeWeights[face, globalX, globalY] : new Vector4(1f, 0f, 0f, 0f));
             }
 
             int triangleIndex = 0;
@@ -145,6 +155,8 @@ namespace TerariaGenerator.Planets
             mesh.vertices = vertices;
             mesh.normals = normals;
             mesh.uv = uvs;
+            mesh.SetUVs(1, climateUvs);
+            mesh.SetUVs(2, biomeUvs);
             mesh.colors = colors;
             mesh.triangles = triangles;
             mesh.RecalculateNormals();
@@ -155,7 +167,7 @@ namespace TerariaGenerator.Planets
             MeshFilter filter = chunk.AddComponent<MeshFilter>();
             MeshRenderer renderer = chunk.AddComponent<MeshRenderer>();
             filter.sharedMesh = mesh;
-            renderer.sharedMaterial = settings.terrainMaterial != null ? settings.terrainMaterial : CreateRuntimeTerrainMaterial();
+            renderer.sharedMaterial = ConfigureTerrainMaterial(settings.terrainMaterial != null ? settings.terrainMaterial : CreateRuntimeTerrainMaterial());
             if (settings.generateCollider)
             {
                 chunk.AddComponent<MeshCollider>().sharedMesh = mesh;
@@ -170,6 +182,20 @@ namespace TerariaGenerator.Planets
             float coast = 1f - Mathf.Clamp01(Mathf.Abs(height - settings.oceanLevel) / Mathf.Max(0.001f, settings.coastSmoothness));
             float river = rivers != null && rivers[face, x, y] ? 1f : 0f;
             return new Color(normalizedHeight, slope, Mathf.Max(coast, river), river);
+        }
+
+        private Vector4 EncodeClimateData(int face, int x, int y)
+        {
+            if (climateMaps == null)
+            {
+                return Vector4.zero;
+            }
+
+            return new Vector4(
+                climateMaps.temperature[face, x, y],
+                climateMaps.moisture[face, x, y],
+                climateMaps.height[face, x, y],
+                climateMaps.primaryBiome[face, x, y] / 3f);
         }
 
         private Vector3 EstimateSmoothedNormal(int face, int x, int y)
@@ -203,9 +229,41 @@ namespace TerariaGenerator.Planets
             generatedObjects.Add(water);
         }
 
+        private Material ConfigureTerrainMaterial(Material material)
+        {
+            if (material == null)
+            {
+                return null;
+            }
+
+            for (int i = 0; i < 4; i++)
+            {
+                BiomeDefinition biome = settings.GetBiome(i);
+                material.SetColor($"_BiomeTint{i}", biome.tint);
+                material.SetFloat($"_BiomeSmoothness{i}", biome.smoothness);
+                material.SetFloat($"_BiomeScale{i}", biome.textureScale);
+                if (biome.albedoTexture != null)
+                {
+                    material.SetTexture($"_BiomeTex{i}", biome.albedoTexture);
+                }
+                if (biome.normalTexture != null)
+                {
+                    material.SetTexture($"_BiomeNormal{i}", biome.normalTexture);
+                }
+            }
+
+            material.SetFloat("_OceanLevel01", Mathf.InverseLerp(settings.oceanLevel - settings.continentStrength, settings.oceanLevel + settings.mountainHeight + settings.continentStrength, settings.oceanLevel));
+            material.SetFloat("_CoastBlend", settings.coastSmoothness);
+            return material;
+        }
+
         private static Material CreateRuntimeTerrainMaterial()
         {
-            Shader shader = Shader.Find("Teraria/Planet Terrain Debug");
+            Shader shader = Shader.Find("Teraria/Biome Terrain");
+            if (shader == null)
+            {
+                shader = Shader.Find("Teraria/Planet Terrain Debug");
+            }
             return new Material(shader != null ? shader : Shader.Find("Standard"));
         }
 
