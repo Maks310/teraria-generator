@@ -15,6 +15,28 @@ namespace TerariaGenerator.Planets
         private bool[,,] rivers;
         private ClimateMaps climateMaps;
         private int faceResolution;
+        private readonly List<SpawnFootprint> occupiedFootprints = new List<SpawnFootprint>();
+        private readonly List<Vector3> placedStructurePositions = new List<Vector3>();
+
+        private struct SurfaceSample
+        {
+            public Vector3 radialUp;
+            public Vector3 surfaceNormal;
+            public Vector3 position;
+            public float rawHeight;
+            public float height01;
+            public float slope;
+            public float temperature;
+            public bool isWater;
+            public bool isRiver;
+            public BiomeDefinition biome;
+        }
+
+        private struct SpawnFootprint
+        {
+            public Vector3 position;
+            public float radius;
+        }
 
         public PlanetSettings Settings
         {
@@ -61,6 +83,7 @@ namespace TerariaGenerator.Planets
                 CreateChunk(face, cx, cy);
             }
 
+            SpawnSurfaceContent();
             CreateWaterSphere();
         }
 
@@ -80,11 +103,13 @@ namespace TerariaGenerator.Planets
                 }
             }
             generatedObjects.Clear();
+            occupiedFootprints.Clear();
+            placedStructurePositions.Clear();
 
             for (int i = transform.childCount - 1; i >= 0; i--)
             {
                 Transform child = transform.GetChild(i);
-                if (child.name.StartsWith("Planet Chunk") || child.name == "Unified Water")
+                if (child.name.StartsWith("Planet Chunk") || child.name == "Unified Water" || child.name == "Spawned Objects" || child.name == "Spawned Structures")
                 {
                     if (Application.isPlaying) Destroy(child.gameObject);
                     else DestroyImmediate(child.gameObject);
@@ -211,6 +236,216 @@ namespace TerariaGenerator.Planets
             return Vector3.Cross(py1 - py0, px1 - px0).normalized;
         }
 
+
+        private void SpawnSurfaceContent()
+        {
+            if (settings.spawnStructures)
+            {
+                SpawnStructures();
+            }
+
+            if (settings.spawnObjects)
+            {
+                SpawnBiomeObjects();
+            }
+        }
+
+        private void SpawnBiomeObjects()
+        {
+            Transform parent = GetOrCreateGeneratedParent("Spawned Objects");
+            int step = Mathf.Max(1, settings.objectSpawnStep);
+
+            for (int face = 0; face < 6; face++)
+            for (int x = 0; x < faceResolution; x += step)
+            for (int y = 0; y < faceResolution; y += step)
+            {
+                SurfaceSample sample = GetSurfaceSample(face, x, y);
+                if (!IsBuildableSurface(sample)) continue;
+                if (sample.slope > settings.maximumObjectSlope) continue;
+                if (sample.biome == null || sample.biome.spawnableObjects == null) continue;
+
+                for (int i = 0; i < sample.biome.spawnableObjects.Length; i++)
+                {
+                    PlanetObjectSpawnDefinition definition = sample.biome.spawnableObjects[i];
+                    if (definition == null) continue;
+                    if (!definition.CanSpawn(sample.height01, sample.slope, sample.temperature)) continue;
+
+                    float density = Mathf.Clamp01(definition.spawnDensity * settings.objectDensityMultiplier);
+                    if (DeterministicValue(settings.seed + 211, face, x, y, i) > density) continue;
+                    if (HasOverlap(sample.position, definition.minimumDistanceBetweenObjects)) continue;
+
+                    GameObject instance = CreateSpawnInstance(definition.prefab, definition.objectName, parent);
+                    AlignInstance(instance.transform, sample, definition.alignToSurfaceNormal, definition.surfaceOffset);
+                    float minScale = Mathf.Min(definition.minScale, definition.maxScale);
+                    float maxScale = Mathf.Max(definition.minScale, definition.maxScale);
+                    float scale = Mathf.Lerp(minScale, maxScale, DeterministicValue(settings.seed + 307, face, x, y, i));
+                    instance.transform.localScale = Vector3.one * scale;
+                    occupiedFootprints.Add(new SpawnFootprint { position = sample.position, radius = Mathf.Max(0.01f, definition.minimumDistanceBetweenObjects) });
+                    generatedObjects.Add(instance);
+                    break;
+                }
+            }
+        }
+
+        private void SpawnStructures()
+        {
+            Transform parent = GetOrCreateGeneratedParent("Spawned Structures");
+            int step = Mathf.Max(1, settings.structureCandidateStep);
+            Vector3 playerSpawnPosition = GetPlayerSpawnPosition();
+            int structureIndex = 0;
+
+            foreach (PlanetStructureSpawnDefinition definition in settings.StructureDefinitions)
+            {
+                for (int face = 0; face < 6; face++)
+                for (int x = 0; x < faceResolution; x += step)
+                for (int y = 0; y < faceResolution; y += step)
+                {
+                    SurfaceSample sample = GetSurfaceSample(face, x, y);
+                    if (!IsBuildableSurface(sample)) continue;
+                    if (!definition.CanSpawn(sample.biome, sample.height01, sample.slope, sample.temperature)) continue;
+                    if (DeterministicValue(settings.seed + 409 + structureIndex * 31, face, x, y, 0) > definition.spawnChance) continue;
+                    if (Vector3.Distance(sample.position, playerSpawnPosition) < definition.minimumDistanceFromPlayerSpawn) continue;
+                    if (!HasStructureClearance(sample.position, definition.minimumDistanceBetweenStructures)) continue;
+                    if (HasOverlap(sample.position, definition.footprintRadius)) continue;
+
+                    GameObject instance = CreateSpawnInstance(definition.prefab, definition.structureName, parent);
+                    AlignInstance(instance.transform, sample, definition.alignToSurfaceNormal, 0f);
+                    placedStructurePositions.Add(sample.position);
+                    occupiedFootprints.Add(new SpawnFootprint { position = sample.position, radius = Mathf.Max(0.01f, definition.footprintRadius) });
+                    generatedObjects.Add(instance);
+                    goto NextStructure;
+                }
+
+                NextStructure:
+                structureIndex++;
+            }
+        }
+
+        private bool IsBuildableSurface(SurfaceSample sample)
+        {
+            return !sample.isWater
+                && !sample.isRiver
+                && sample.rawHeight > settings.oceanLevel + settings.waterSpawnClearance;
+        }
+
+        private SurfaceSample GetSurfaceSample(int face, int x, int y)
+        {
+            Vector3 radialUp = CubeSphereUtility.PointOnFace(face, x / (faceResolution - 1f), y / (faceResolution - 1f));
+            float rawHeight = heights[face, x, y];
+            Vector3 surfaceNormal = EstimateSmoothedNormal(face, x, y);
+            if (Vector3.Dot(surfaceNormal, radialUp) < 0f)
+            {
+                surfaceNormal = -surfaceNormal;
+            }
+
+            int biomeIndex = climateMaps != null ? climateMaps.primaryBiome[face, x, y] : 0;
+            return new SurfaceSample
+            {
+                radialUp = radialUp,
+                surfaceNormal = surfaceNormal.sqrMagnitude > 0.0001f ? surfaceNormal.normalized : radialUp,
+                position = radialUp * (settings.radiusPlanet + rawHeight),
+                rawHeight = rawHeight,
+                height01 = climateMaps != null ? climateMaps.height[face, x, y] : 0f,
+                slope = 1f - Mathf.Clamp01(Mathf.Abs(Vector3.Dot(radialUp, surfaceNormal.normalized))),
+                temperature = climateMaps != null ? climateMaps.temperature[face, x, y] : 0.5f,
+                isWater = rawHeight <= settings.oceanLevel,
+                isRiver = rivers != null && rivers[face, x, y],
+                biome = settings.GetBiome(biomeIndex)
+            };
+        }
+
+        private Transform GetOrCreateGeneratedParent(string parentName)
+        {
+            Transform existing = transform.Find(parentName);
+            if (existing != null)
+            {
+                generatedObjects.Add(existing.gameObject);
+                return existing;
+            }
+
+            GameObject parent = new GameObject(parentName);
+            parent.transform.SetParent(transform, false);
+            generatedObjects.Add(parent);
+            return parent.transform;
+        }
+
+        private GameObject CreateSpawnInstance(GameObject prefab, string objectName, Transform parent)
+        {
+            GameObject instance;
+            if (prefab != null)
+            {
+                instance = Application.isPlaying ? Instantiate(prefab) : Instantiate(prefab);
+                instance.name = objectName;
+            }
+            else
+            {
+                instance = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                instance.name = $"{objectName} Placeholder";
+                Collider collider = instance.GetComponent<Collider>();
+                if (collider != null)
+                {
+                    if (Application.isPlaying) Destroy(collider);
+                    else DestroyImmediate(collider);
+                }
+            }
+
+            instance.transform.SetParent(parent, false);
+            return instance;
+        }
+
+        private void AlignInstance(Transform instance, SurfaceSample sample, bool alignToSurfaceNormal, float surfaceOffset)
+        {
+            Vector3 up = alignToSurfaceNormal ? sample.surfaceNormal : sample.radialUp;
+            instance.localPosition = sample.position + up * surfaceOffset;
+            instance.localRotation = Quaternion.FromToRotation(Vector3.up, up);
+        }
+
+        private Vector3 GetPlayerSpawnPosition()
+        {
+            Vector3 direction = settings.playerSpawnDirection.sqrMagnitude > 0.0001f ? settings.playerSpawnDirection.normalized : Vector3.up;
+            return direction * (settings.radiusPlanet + settings.oceanLevel);
+        }
+
+        private bool HasStructureClearance(Vector3 position, float requiredDistance)
+        {
+            for (int i = 0; i < placedStructurePositions.Count; i++)
+            {
+                if (Vector3.Distance(position, placedStructurePositions[i]) < requiredDistance)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private bool HasOverlap(Vector3 position, float radius)
+        {
+            for (int i = 0; i < occupiedFootprints.Count; i++)
+            {
+                float required = Mathf.Max(radius, occupiedFootprints[i].radius);
+                if ((position - occupiedFootprints[i].position).sqrMagnitude < required * required)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static float DeterministicValue(int seed, int face, int x, int y, int salt)
+        {
+            unchecked
+            {
+                int hash = seed;
+                hash = hash * 397 ^ face;
+                hash = hash * 397 ^ x;
+                hash = hash * 397 ^ y;
+                hash = hash * 397 ^ salt;
+                return (Mathf.Abs(hash) % 100000) / 99999f;
+            }
+        }
+
         private void CreateWaterSphere()
         {
             GameObject water = GameObject.CreatePrimitive(PrimitiveType.Sphere);
@@ -254,12 +489,30 @@ namespace TerariaGenerator.Planets
 
             material.SetFloat("_OceanLevel01", Mathf.InverseLerp(settings.oceanLevel - settings.continentStrength, settings.oceanLevel + settings.mountainHeight + settings.continentStrength, settings.oceanLevel));
             material.SetFloat("_CoastBlend", settings.coastSmoothness);
+            material.SetColor("_GlobalColorTint", settings.globalColorTint);
+            material.SetFloat("_GlobalSaturation", settings.globalSaturation);
+            material.SetFloat("_GlobalContrast", settings.globalContrast);
+            material.SetFloat("_SnowStartHeight", settings.snowStartHeight);
+            material.SetFloat("_SnowBlend", settings.snowBlend);
+            material.SetFloat("_WetnessStrength", settings.wetnessStrength);
+            material.SetFloat("_Season", settings.season);
+            material.SetFloat("_SeasonStrength", settings.seasonStrength);
+            material.SetFloat("_FarDetailStart", settings.farDetailStart);
+            material.SetFloat("_FarDetailEnd", Mathf.Max(settings.farDetailStart + 0.001f, settings.farDetailEnd));
+            material.SetColor("_ColdClimateTint", settings.coldClimateTint);
+            material.SetColor("_WarmClimateTint", settings.warmClimateTint);
+            material.SetColor("_WetClimateTint", settings.wetClimateTint);
+            material.SetColor("_DryClimateTint", settings.dryClimateTint);
             return material;
         }
 
         private static Material CreateRuntimeTerrainMaterial()
         {
-            Shader shader = Shader.Find("Teraria/Biome Terrain");
+            Shader shader = Shader.Find("Teraria/Planet Surface");
+            if (shader == null)
+            {
+                shader = Shader.Find("Teraria/Biome Terrain");
+            }
             if (shader == null)
             {
                 shader = Shader.Find("Teraria/Planet Terrain Debug");
