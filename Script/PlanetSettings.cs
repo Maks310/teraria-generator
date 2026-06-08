@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace TerariaGenerator.Planets
@@ -67,12 +68,76 @@ namespace TerariaGenerator.Planets
         [Tooltip("First four biomes are passed to the default terrain shader as texture layers.")]
         public BiomeDefinition[] biomes;
 
+        public IEnumerable<PlanetStructureSpawnDefinition> StructureDefinitions
+        {
+            get
+            {
+                if (ancientRuins != null)
+                {
+                    foreach (PlanetStructureSpawnDefinition structure in ancientRuins)
+                    {
+                        if (structure != null) yield return structure;
+                    }
+                }
+
+                if (specialLocations != null)
+                {
+                    foreach (PlanetStructureSpawnDefinition structure in specialLocations)
+                    {
+                        if (structure != null) yield return structure;
+                    }
+                }
+
+                if (futureDungeons != null)
+                {
+                    foreach (PlanetStructureSpawnDefinition structure in futureDungeons)
+                    {
+                        if (structure != null) yield return structure;
+                    }
+                }
+            }
+        }
+
         [Header("Rivers")]
         [Range(0, 128)] public int riverCount = 18;
         [Range(0.55f, 1f)] public float riverSourceMinHeight01 = 0.72f;
         [Min(0.001f)] public float riverWidth = 0.035f;
         [Min(0.001f)] public float riverDepth = 0.18f;
         [Range(16, 4096)] public int maxRiverSteps = 768;
+
+        [Header("Object Spawning")]
+        public bool spawnObjects = true;
+        [Range(1, 16)] public int objectSpawnStep = 3;
+        [Tooltip("Global multiplier applied to every biome object spawn density.")]
+        [Range(0f, 4f)] public float objectDensityMultiplier = 1f;
+        [Tooltip("Objects are never spawned this close to ocean level.")]
+        [Min(0f)] public float waterSpawnClearance = 0.05f;
+        [Tooltip("Fallback slope cap used before an object-specific max slope is evaluated.")]
+        [Range(0f, 1f)] public float maximumObjectSlope = 0.72f;
+
+        [Header("Structures")]
+        public bool spawnStructures = true;
+        [Range(1, 32)] public int structureCandidateStep = 8;
+        public Vector3 playerSpawnDirection = Vector3.up;
+        public PlanetStructureSpawnDefinition[] ancientRuins;
+        public PlanetStructureSpawnDefinition[] specialLocations;
+        public PlanetStructureSpawnDefinition[] futureDungeons;
+
+        [Header("Planet Surface Shader")]
+        public Color globalColorTint = Color.white;
+        [Range(0f, 2f)] public float globalSaturation = 1f;
+        [Range(0f, 2f)] public float globalContrast = 1f;
+        [Range(0f, 1f)] public float snowStartHeight = 0.72f;
+        [Range(0f, 1f)] public float snowBlend = 0.18f;
+        [Range(0f, 1f)] public float wetnessStrength = 0.45f;
+        [Range(0f, 1f)] public float season = 0f;
+        [Range(0f, 1f)] public float seasonStrength = 0f;
+        [Min(0f)] public float farDetailStart = 120f;
+        [Min(0f)] public float farDetailEnd = 420f;
+        public Color coldClimateTint = new Color(0.72f, 0.82f, 1f, 1f);
+        public Color warmClimateTint = new Color(1f, 0.86f, 0.58f, 1f);
+        public Color wetClimateTint = new Color(0.62f, 0.82f, 0.7f, 1f);
+        public Color dryClimateTint = new Color(0.88f, 0.72f, 0.46f, 1f);
 
         [Header("Materials")]
         public Material terrainMaterial;
@@ -119,10 +184,20 @@ namespace TerariaGenerator.Planets
         {
             private static readonly BiomeDefinition[] Defaults =
             {
-                Create("Ocean Shore", 0f, 1f, 0.45f, 1f, 0f, 0.28f, new Color(0.78f, 0.67f, 0.42f, 1f), 0.45f, 0.05f, 0.1f, 6f, 18f),
-                Create("Temperate Grassland", 0.35f, 0.82f, 0.28f, 0.78f, 0.2f, 0.72f, new Color(0.28f, 0.48f, 0.18f, 1f), 0.38f, 0.08f, 0.12f, 4f, 16f),
-                Create("Cold Tundra", 0f, 0.42f, 0.12f, 0.82f, 0.18f, 0.86f, new Color(0.58f, 0.62f, 0.54f, 1f), 0.22f, 0.04f, 0.18f, 7f, -4f),
-                Create("Arid Desert", 0.58f, 1f, 0f, 0.34f, 0.18f, 0.72f, new Color(0.77f, 0.61f, 0.31f, 1f), 0.04f, 0.01f, 0.02f, 5f, 28f)
+                Create("Ocean Shore", 0f, 1f, 0.45f, 1f, 0f, 0.28f, new Color(0.78f, 0.67f, 0.42f, 1f), 0.45f, 0.05f, 0.1f, 6f, 18f,
+                    Obj("Shore Stone", PlanetObjectSpawnCategory.Geology, 0.05f, 0.03f, 0.32f, 0f, 0.4f, 0f, 1f, 2.5f)),
+                Create("Temperate Grassland", 0.35f, 0.82f, 0.28f, 0.78f, 0.2f, 0.72f, new Color(0.28f, 0.48f, 0.18f, 1f), 0.38f, 0.08f, 0.12f, 4f, 16f,
+                    Obj("Tree", PlanetObjectSpawnCategory.Flora, 0.11f, 0.2f, 0.78f, 0f, 0.36f, 0.25f, 0.85f, 3.2f),
+                    Obj("Mushroom", PlanetObjectSpawnCategory.Flora, 0.08f, 0.2f, 0.82f, 0f, 0.5f, 0.2f, 0.75f, 1.4f),
+                    Obj("Bush", PlanetObjectSpawnCategory.Flora, 0.14f, 0.2f, 0.82f, 0f, 0.48f, 0.25f, 0.9f, 1.8f),
+                    Obj("Stone", PlanetObjectSpawnCategory.Geology, 0.05f, 0.2f, 0.9f, 0f, 0.62f, 0f, 1f, 2.5f)),
+                Create("Cold Tundra", 0f, 0.42f, 0.12f, 0.82f, 0.18f, 0.86f, new Color(0.58f, 0.62f, 0.54f, 1f), 0.22f, 0.04f, 0.18f, 7f, -4f,
+                    Obj("Frozen Shrub", PlanetObjectSpawnCategory.Flora, 0.06f, 0.18f, 0.8f, 0f, 0.42f, 0f, 0.45f, 2f),
+                    Obj("Frost Stone", PlanetObjectSpawnCategory.Geology, 0.08f, 0.2f, 0.9f, 0f, 0.6f, 0f, 0.5f, 2.6f)),
+                Create("Arid Desert", 0.58f, 1f, 0f, 0.34f, 0.18f, 0.72f, new Color(0.77f, 0.61f, 0.31f, 1f), 0.04f, 0.01f, 0.02f, 5f, 28f,
+                    Obj("Dry Bush", PlanetObjectSpawnCategory.Flora, 0.04f, 0.18f, 0.76f, 0f, 0.35f, 0.55f, 1f, 2.4f),
+                    Obj("Crystal", PlanetObjectSpawnCategory.Crystal, 0.025f, 0.25f, 0.82f, 0f, 0.5f, 0.45f, 1f, 4f),
+                    Obj("Desert Stone", PlanetObjectSpawnCategory.Geology, 0.06f, 0.18f, 0.84f, 0f, 0.58f, 0.4f, 1f, 2.8f))
             };
 
             public static BiomeDefinition GetDefaultBiome(int index)
@@ -130,7 +205,24 @@ namespace TerariaGenerator.Planets
                 return Defaults[Mathf.Clamp(index, 0, Defaults.Length - 1)];
             }
 
-            private static BiomeDefinition Create(string name, float minT, float maxT, float minM, float maxM, float minH, float maxH, Color tint, float rain, float storm, float fog, float wind, float averageTemperature)
+            private static PlanetObjectSpawnDefinition Obj(string name, PlanetObjectSpawnCategory category, float density, float minHeight, float maxHeight, float minSlope, float maxSlope, float minTemperature, float maxTemperature, float spacing)
+            {
+                return new PlanetObjectSpawnDefinition
+                {
+                    objectName = name,
+                    category = category,
+                    spawnDensity = density,
+                    minHeight = minHeight,
+                    maxHeight = maxHeight,
+                    minSlope = minSlope,
+                    maxSlope = maxSlope,
+                    minTemperature = minTemperature,
+                    maxTemperature = maxTemperature,
+                    minimumDistanceBetweenObjects = spacing
+                };
+            }
+
+            private static BiomeDefinition Create(string name, float minT, float maxT, float minM, float maxM, float minH, float maxH, Color tint, float rain, float storm, float fog, float wind, float averageTemperature, params PlanetObjectSpawnDefinition[] spawnableObjects)
             {
                 BiomeDefinition biome = ScriptableObject.CreateInstance<BiomeDefinition>();
                 biome.name = name;
@@ -147,6 +239,7 @@ namespace TerariaGenerator.Planets
                 biome.fogChance = fog;
                 biome.windStrength = wind;
                 biome.averageTemperature = averageTemperature;
+                biome.spawnableObjects = spawnableObjects;
                 return biome;
             }
         }

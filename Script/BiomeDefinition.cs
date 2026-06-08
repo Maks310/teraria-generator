@@ -16,6 +16,10 @@ namespace TerariaGenerator.Planets
         [Range(0f, 1f)] public float minimumHeight = 0.2f;
         [Range(0f, 1f)] public float maximumHeight = 0.85f;
 
+        [Header("Spawnable Objects")]
+        [Tooltip("Procedural object palette available after this biome has been selected for a terrain point.")]
+        public PlanetObjectSpawnDefinition[] spawnableObjects;
+
         [Header("Terrain Shading")]
         public Texture2D albedoTexture;
         public Texture2D normalTexture;
