@@ -25,6 +25,7 @@ public class PlanetGenerator : MonoBehaviour
     [Header("Pipeline Settings")]
     public PlanetNoiseSettings noiseSettings = new PlanetNoiseSettings();
     public PlanetClimateSettings climateSettings = new PlanetClimateSettings();
+    public PlanetRiverSettings riverSettings = new PlanetRiverSettings();
 
     [Header("Pipeline References")]
     public CubeSphereMeshBuilder meshBuilder;
@@ -32,6 +33,7 @@ public class PlanetGenerator : MonoBehaviour
     public PlanetSurfaceSpawner surfaceSpawner;
     public PlanetPOIManager poiManager;
     public PlanetWaterSystem waterSystem;
+    public PlanetRiverSystem riverSystem;
     public ChunkStreamingManager streamingManager;
     public PlanetMapSystem mapSystem;
 
@@ -80,6 +82,10 @@ public class PlanetGenerator : MonoBehaviour
         {
             noiseSettings.seed = seed;
         }
+        if (riverSettings == null)
+        {
+            riverSettings = new PlanetRiverSettings();
+        }
     }
 
     [ContextMenu("Generate Planet")]
@@ -89,6 +95,10 @@ public class PlanetGenerator : MonoBehaviour
         if (clearBeforeGenerate)
         {
             ClearPlanet();
+        }
+        if (riverSystem != null)
+        {
+            riverSystem.ClearCache();
         }
 
         if (noiseSettings == null)
@@ -165,7 +175,8 @@ public class PlanetGenerator : MonoBehaviour
         direction = direction.sqrMagnitude > 0f ? direction.normalized : Vector3.up;
         PlanetNoiseSample noise = PlanetNoise.Sample(direction, noiseSettings);
         float normalizedHeight = PlanetNoise.BuildHeight(noise, waterLevel, mountainAmount, oceanDepth);
-        PlanetClimateSample climate = PlanetClimate.Evaluate(direction, normalizedHeight, noise, waterLevel, climateSettings);
+        PlanetRiverSample river = riverSystem != null ? riverSystem.SampleRiver(this, direction, noise, normalizedHeight) : new PlanetRiverSample { riverDistance = 1f, drainageId = -1 };
+        PlanetClimateSample climate = PlanetClimate.Evaluate(direction, normalizedHeight, noise, waterLevel, climateSettings, river);
         BiomeDefinition biome = biomeResolver != null ? biomeResolver.ResolveBiome(direction, normalizedHeight, noise, climate) : null;
 
         PlanetSurfaceSample sample = new PlanetSurfaceSample();
@@ -175,6 +186,7 @@ public class PlanetGenerator : MonoBehaviour
         sample.underwater = normalizedHeight < waterLevel;
         sample.noise = noise;
         sample.climate = climate;
+        sample.river = river;
         sample.biome = biome;
         return sample;
     }
@@ -250,6 +262,19 @@ public class PlanetGenerator : MonoBehaviour
         if (waterSystem == null)
         {
             waterSystem = GetComponent<PlanetWaterSystem>();
+        }
+        if (riverSettings == null)
+        {
+            riverSettings = new PlanetRiverSettings();
+        }
+        if (riverSystem == null)
+        {
+            riverSystem = GetComponent<PlanetRiverSystem>();
+            if (riverSystem == null) riverSystem = gameObject.AddComponent<PlanetRiverSystem>();
+        }
+        if (riverSystem != null)
+        {
+            riverSystem.settings = riverSettings;
         }
         if (streamingManager == null)
         {

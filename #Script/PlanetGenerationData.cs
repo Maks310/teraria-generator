@@ -8,6 +8,7 @@ public struct PlanetSurfaceSample
     public bool underwater;
     public PlanetNoiseSample noise;
     public PlanetClimateSample climate;
+    public PlanetRiverSample river;
     public BiomeDefinition biome;
 }
 
