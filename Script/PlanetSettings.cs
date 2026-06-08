@@ -47,6 +47,26 @@ namespace TerariaGenerator.Planets
         public bool generateCollider = true;
         public bool generateOnStart = true;
 
+        [Header("Climate Maps")]
+        [Min(0.001f)] public float temperatureNoiseScale = 2.4f;
+        [Range(0f, 1f)] public float temperatureNoiseStrength = 0.16f;
+        [Range(0.1f, 4f)] public float latitudeTemperatureFalloff = 1.35f;
+        [Min(0f)] public float temperatureHeightFalloff = 0.08f;
+        [Range(-1f, 1f)] public float temperatureOffset = 0f;
+        [Min(0.001f)] public float moistureNoiseScale = 3.2f;
+        [Range(0f, 1f)] public float moistureNoiseStrength = 0.22f;
+        [Range(0.01f, 1f)] public float oceanMoistureDistance = 0.28f;
+        [Range(0.01f, 1f)] public float riverMoistureDistance = 0.16f;
+        [Range(0f, 1f)] public float oceanMoistureStrength = 0.72f;
+        [Range(0f, 1f)] public float riverMoistureStrength = 0.38f;
+        [Range(-1f, 1f)] public float moistureOffset = 0.08f;
+
+        [Header("Biomes")]
+        [Tooltip("Blend width used when a climate value approaches a biome boundary.")]
+        [Range(0.001f, 0.5f)] public float biomeBlendDistance = 0.08f;
+        [Tooltip("First four biomes are passed to the default terrain shader as texture layers.")]
+        public BiomeDefinition[] biomes;
+
         [Header("Rivers")]
         [Range(0, 128)] public int riverCount = 18;
         [Range(0.55f, 1f)] public float riverSourceMinHeight01 = 0.72f;
@@ -57,6 +77,18 @@ namespace TerariaGenerator.Planets
         [Header("Materials")]
         public Material terrainMaterial;
         public Material waterMaterial;
+
+        public int BiomeCountForShader => Mathf.Clamp(biomes != null && biomes.Length > 0 ? biomes.Length : 4, 1, 4);
+
+        public BiomeDefinition GetBiome(int index)
+        {
+            if (biomes != null && index >= 0 && index < biomes.Length && biomes[index] != null)
+            {
+                return biomes[index];
+            }
+
+            return RuntimeBiomeLibrary.GetDefaultBiome(index);
+        }
 
         public static PlanetSettings CreateRuntimeDefault()
         {
@@ -81,6 +113,41 @@ namespace TerariaGenerator.Planets
                     oceanLevel = 0.05f; continentScale = 0.82f; continentStrength = 2.5f; continentCount = 4; mountainHeight = 0.35f; hillHeight = 0.25f; detailHeight = 0.05f; riverCount = 22; break;
                 default:
                     oceanLevel = 0f; continentScale = 0.75f; continentStrength = 4.5f; continentCount = 4; mountainHeight = 3f; hillHeight = 0.8f; riverCount = 18; break;
+            }
+        }
+        private static class RuntimeBiomeLibrary
+        {
+            private static readonly BiomeDefinition[] Defaults =
+            {
+                Create("Ocean Shore", 0f, 1f, 0.45f, 1f, 0f, 0.28f, new Color(0.78f, 0.67f, 0.42f, 1f), 0.45f, 0.05f, 0.1f, 6f, 18f),
+                Create("Temperate Grassland", 0.35f, 0.82f, 0.28f, 0.78f, 0.2f, 0.72f, new Color(0.28f, 0.48f, 0.18f, 1f), 0.38f, 0.08f, 0.12f, 4f, 16f),
+                Create("Cold Tundra", 0f, 0.42f, 0.12f, 0.82f, 0.18f, 0.86f, new Color(0.58f, 0.62f, 0.54f, 1f), 0.22f, 0.04f, 0.18f, 7f, -4f),
+                Create("Arid Desert", 0.58f, 1f, 0f, 0.34f, 0.18f, 0.72f, new Color(0.77f, 0.61f, 0.31f, 1f), 0.04f, 0.01f, 0.02f, 5f, 28f)
+            };
+
+            public static BiomeDefinition GetDefaultBiome(int index)
+            {
+                return Defaults[Mathf.Clamp(index, 0, Defaults.Length - 1)];
+            }
+
+            private static BiomeDefinition Create(string name, float minT, float maxT, float minM, float maxM, float minH, float maxH, Color tint, float rain, float storm, float fog, float wind, float averageTemperature)
+            {
+                BiomeDefinition biome = ScriptableObject.CreateInstance<BiomeDefinition>();
+                biome.name = name;
+                biome.biomeName = name;
+                biome.minimumTemperature = minT;
+                biome.maximumTemperature = maxT;
+                biome.minimumMoisture = minM;
+                biome.maximumMoisture = maxM;
+                biome.minimumHeight = minH;
+                biome.maximumHeight = maxH;
+                biome.tint = tint;
+                biome.rainChance = rain;
+                biome.stormChance = storm;
+                biome.fogChance = fog;
+                biome.windStrength = wind;
+                biome.averageTemperature = averageTemperature;
+                return biome;
             }
         }
     }
