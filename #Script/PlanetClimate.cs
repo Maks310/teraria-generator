@@ -35,7 +35,7 @@ public class PlanetClimateSettings
 
 public static class PlanetClimate
 {
-    public static PlanetClimateSample Evaluate(Vector3 direction, float normalizedHeight, PlanetNoiseSample noise, float waterLevel, PlanetClimateSettings settings)
+    public static PlanetClimateSample Evaluate(Vector3 direction, float normalizedHeight, PlanetNoiseSample noise, float waterLevel, PlanetClimateSettings settings, PlanetRiverSample? river = null)
     {
         if (settings == null)
         {
@@ -55,6 +55,15 @@ public static class PlanetClimate
 
         float moisture = Mathf.Clamp01(noise.climateNoise * 0.48f + (1f - noise.ridgeMask) * 0.22f + oceanProximity * settings.oceanMoistureInfluence);
         float humidity = Mathf.Clamp01((moisture + oceanProximity) * 0.5f - Mathf.Max(0f, normalizedHeight - waterLevel) * 0.12f);
+
+        if (river.HasValue)
+        {
+            PlanetRiverSample riverSample = river.Value;
+            float riverInfluence = Mathf.Clamp01(Mathf.Max(riverSample.riverMask, 1f - riverSample.riverDistance));
+            float lakeInfluence = Mathf.Clamp01(riverSample.lakeMask);
+            moisture = Mathf.Clamp01(moisture + riverInfluence * 0.24f + lakeInfluence * 0.32f);
+            humidity = Mathf.Clamp01(humidity + riverInfluence * 0.28f + lakeInfluence * 0.38f);
+        }
 
         PlanetClimateSample sample = new PlanetClimateSample();
         sample.latitude = latitudeSigned;

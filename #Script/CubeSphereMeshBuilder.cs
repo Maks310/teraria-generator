@@ -69,6 +69,7 @@ public class CubeSphereMeshBuilder : MonoBehaviour
         Vector2[] uvs = new Vector2[vertices.Length];
         Vector2[] tectonicUv2 = new Vector2[vertices.Length];
         Vector2[] tectonicUv3 = new Vector2[vertices.Length];
+        Vector2[] riverUv4 = new Vector2[vertices.Length];
         int[] triangles = new int[chunkResolution * chunkResolution * 6];
 
         int triIndex = 0;
@@ -88,8 +89,10 @@ public class CubeSphereMeshBuilder : MonoBehaviour
                 colors[index] = sample.biome != null ? Color.Lerp(sample.biome.primaryColor, sample.biome.secondaryColor, sample.noise.heightNoise) : Color.white;
                 uvs[index] = new Vector2(faceU, faceV);
                 // UV2: x = continental shelf, y = ocean basin. UV3: x = tectonic mountains, y = island arcs.
+                // UV4: x = river mask, y = lake mask for terrain shaders/materials.
                 tectonicUv2[index] = new Vector2(sample.noise.continentalShelfMask, sample.noise.oceanBasinMask);
                 tectonicUv3[index] = new Vector2(sample.noise.tectonicMountainMask, sample.noise.islandArcMask);
+                riverUv4[index] = new Vector2(sample.river.riverMask, sample.river.lakeMask);
 
                 if (x < chunkResolution && y < chunkResolution)
                 {
@@ -119,6 +122,7 @@ public class CubeSphereMeshBuilder : MonoBehaviour
         mesh.uv = uvs;
         mesh.uv2 = tectonicUv2;
         mesh.uv3 = tectonicUv3;
+        mesh.uv4 = riverUv4;
         mesh.triangles = triangles;
         mesh.RecalculateBounds();
         return mesh;
