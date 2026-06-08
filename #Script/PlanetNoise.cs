@@ -16,6 +16,15 @@ public struct PlanetNoiseSample
     public float floatingIslandMask;
     public float caveMask;
     public float anomalyMask;
+    public int plateId;
+    public float plateBoundary;
+    public float convergentBoundary;
+    public float divergentBoundary;
+    public float oceanicPlateMask;
+    public float oceanBasinMask;
+    public float continentalShelfMask;
+    public float islandArcMask;
+    public float tectonicMountainMask;
 }
 
 [System.Serializable]
@@ -30,6 +39,16 @@ public class PlanetNoiseSettings
     [Range(1, 9)] public int terrainOctaves = 5;
     [Range(0f, 1f)] public float persistence = 0.48f;
     public float lacunarity = 2f;
+
+    [Header("Tectonics")]
+    [Range(4, 96)] public int plateCount = 24;
+    public int plateSeedOffset = 17031;
+    [Range(0f, 1f)] public float plateJitter = 0.38f;
+    [Range(0f, 1f)] public float oceanicPlateRatio = 0.58f;
+    [Range(0.005f, 0.22f)] public float shelfWidth = 0.075f;
+    [Range(0f, 1f)] public float islandArcStrength = 0.42f;
+    [Range(0f, 1f)] public float boundaryMountainStrength = 0.72f;
+    [Range(0f, 1f)] public float basinDepth = 0.68f;
 }
 
 public static class PlanetNoise
@@ -46,7 +65,9 @@ public static class PlanetNoise
 
         PlanetNoiseSample sample = new PlanetNoiseSample();
         sample.domainWarp = Vector3.Angle(direction, warpedDirection) / 180f;
-        sample.continentalMask = FractalSphereNoise(warpedDirection, settings.continentScale, 4, 0.58f, 2.03f, settings.seed + 11);
+        ApplyTectonics(direction, settings, ref sample);
+        float continentalDetail = FractalSphereNoise(warpedDirection, settings.continentScale, 3, 0.5f, 2.03f, settings.seed + 11);
+        sample.continentalMask = Mathf.Clamp01(sample.continentalMask + (continentalDetail - 0.5f) * 0.16f * (1f - sample.plateBoundary));
         sample.heightNoise = FractalSphereNoise(warpedDirection, settings.terrainScale, settings.terrainOctaves, settings.persistence, settings.lacunarity, settings.seed + 101);
         sample.ridgeMask = RidgedFractalSphereNoise(warpedDirection, settings.ridgeScale, 4, 0.52f, 2.1f, settings.seed + 211);
         sample.climateNoise = FractalSphereNoise(warpedDirection, settings.climateScale, 3, 0.55f, 2f, settings.seed + 307);
@@ -63,13 +84,28 @@ public static class PlanetNoise
 
     public static float BuildHeight(PlanetNoiseSample sample, float waterLevel, float mountainAmount, float oceanDepth)
     {
-        float continents = NoiseGenerator.SmoothStep(1f - Mathf.Clamp01(waterLevel) - 0.18f, 1f - Mathf.Clamp01(waterLevel) + 0.18f, sample.continentalMask);
-        float baseLand = Mathf.Lerp(-Mathf.Clamp01(oceanDepth), 0.36f, continents);
-        float detail = (sample.heightNoise - 0.5f) * Mathf.Lerp(0.05f, 0.22f, continents);
-        float ridges = Mathf.Pow(Mathf.Clamp01(sample.ridgeMask), 2.2f) * Mathf.Clamp01(mountainAmount) * continents;
-        float volcano = Mathf.Pow(sample.volcanicMask, 4f) * 0.16f;
+        waterLevel = Mathf.Clamp01(waterLevel);
+        float depth = Mathf.Clamp01(oceanDepth);
+        float continents = Mathf.Clamp01(sample.continentalMask);
+        float oceanBasin = Mathf.Clamp01(sample.oceanBasinMask);
+        float shelf = Mathf.Clamp01(sample.continentalShelfMask);
+        float mountains = Mathf.Clamp01(sample.tectonicMountainMask);
+        float islandArc = Mathf.Clamp01(sample.islandArcMask);
+
+        float deepOceanHeight = waterLevel - Mathf.Lerp(0.18f, 0.42f, depth) * oceanBasin;
+        float continentalHeight = waterLevel + Mathf.Lerp(0.05f, 0.22f, continents);
+        float baseHeight = Mathf.Lerp(deepOceanHeight, continentalHeight, continents);
+        baseHeight = Mathf.Lerp(baseHeight, waterLevel - 0.035f, shelf * (1f - continents));
+
+        float detailStrength = Mathf.Lerp(0.025f, 0.115f, continents) * (1f - oceanBasin * 0.55f);
+        float detail = (sample.heightNoise - 0.5f) * detailStrength;
+        float erosionRidges = Mathf.Pow(Mathf.Clamp01(sample.ridgeMask), 2.4f) * Mathf.Clamp01(mountainAmount) * (0.035f + 0.08f * continents) * (1f - oceanBasin);
+        float tectonicUplift = mountains * Mathf.Clamp01(mountainAmount) * 0.24f;
+        float arcUplift = islandArc * Mathf.Lerp(0.04f, 0.14f, Mathf.Clamp01(mountainAmount));
+        float riftDrop = Mathf.Clamp01(sample.divergentBoundary) * (1f - continents) * 0.055f;
+        float volcano = Mathf.Pow(sample.volcanicMask, 4f) * Mathf.Lerp(0.035f, 0.11f, sample.convergentBoundary + islandArc);
         float floating = Mathf.Pow(sample.floatingIslandMask, 5f) * 0.2f;
-        return Mathf.Clamp(baseLand + detail + ridges + volcano + floating + 0.38f, 0f, 1f);
+        return Mathf.Clamp01(baseHeight + detail + erosionRidges + tectonicUplift + arcUplift + volcano + floating - riftDrop);
     }
 
     public static Vector3 DomainWarp(Vector3 direction, PlanetNoiseSettings settings)
@@ -118,6 +154,97 @@ public static class PlanetNoise
         float yz = Mathf.PerlinNoise(direction.y * scale + offset * 0.37f, direction.z * scale + offset * 0.61f);
         float zx = Mathf.PerlinNoise(direction.z * scale - offset * 0.29f, direction.x * scale + offset * 0.13f);
         return Mathf.Clamp01((xy + yz + zx) / 3f);
+    }
+
+    private static void ApplyTectonics(Vector3 direction, PlanetNoiseSettings settings, ref PlanetNoiseSample sample)
+    {
+        int plateCount = Mathf.Clamp(settings.plateCount, 4, 96);
+        int plateSeed = settings.seed + settings.plateSeedOffset;
+        float nearestDistance = float.MaxValue;
+        float secondDistance = float.MaxValue;
+        int nearestId = 0;
+        int secondId = 0;
+
+        for (int i = 0; i < plateCount; i++)
+        {
+            Vector3 center = PlateCenter(i, plateCount, plateSeed, settings.plateJitter);
+            float distance = Mathf.Acos(Mathf.Clamp(Vector3.Dot(direction, center), -1f, 1f));
+            if (distance < nearestDistance)
+            {
+                secondDistance = nearestDistance;
+                secondId = nearestId;
+                nearestDistance = distance;
+                nearestId = i;
+            }
+            else if (distance < secondDistance)
+            {
+                secondDistance = distance;
+                secondId = i;
+            }
+        }
+
+        bool nearestOceanic = IsOceanicPlate(nearestId, plateSeed, settings.oceanicPlateRatio);
+        bool secondOceanic = IsOceanicPlate(secondId, plateSeed, settings.oceanicPlateRatio);
+        float boundaryDistance = Mathf.Max(0f, secondDistance - nearestDistance);
+        float boundaryWidth = Mathf.Max(0.006f, settings.shelfWidth * 0.85f);
+        float boundary = 1f - Smooth01(boundaryDistance / boundaryWidth);
+        float shelf = 1f - Smooth01(boundaryDistance / Mathf.Max(0.008f, settings.shelfWidth * 1.65f));
+        bool mixedCrust = nearestOceanic != secondOceanic;
+        bool bothOceanic = nearestOceanic && secondOceanic;
+        bool bothContinental = !nearestOceanic && !secondOceanic;
+        float pairMotion = Hash01(Mathf.Min(nearestId, secondId), Mathf.Max(nearestId, secondId), plateSeed + 4049);
+        float convergenceChance = bothContinental ? 0.82f : (mixedCrust ? 0.74f : 0.56f);
+        float convergent = boundary * (pairMotion < convergenceChance ? 1f : 0f);
+        float divergent = boundary * (pairMotion >= convergenceChance ? 1f : 0f);
+        float boundaryNoise = Hash01(nearestId, secondId, plateSeed + 8191) * 0.35f + 0.65f;
+
+        sample.plateId = nearestId;
+        sample.plateBoundary = boundary;
+        sample.convergentBoundary = convergent;
+        sample.divergentBoundary = divergent;
+        sample.oceanicPlateMask = nearestOceanic ? 1f : 0f;
+        sample.continentalMask = nearestOceanic ? 0f : 1f;
+        sample.oceanBasinMask = nearestOceanic ? Mathf.Clamp01((1f - shelf) * settings.basinDepth) : 0f;
+        sample.continentalShelfMask = mixedCrust ? shelf : 0f;
+        sample.islandArcMask = Mathf.Clamp01(convergent * settings.islandArcStrength * boundaryNoise * (bothOceanic ? 1f : (mixedCrust && nearestOceanic ? 0.62f : 0.18f)));
+        sample.tectonicMountainMask = Mathf.Clamp01(convergent * settings.boundaryMountainStrength * boundaryNoise * (bothContinental ? 1f : (mixedCrust ? 0.72f : 0.24f)));
+    }
+
+    private static Vector3 PlateCenter(int index, int plateCount, int seed, float jitter)
+    {
+        float t = (index + 0.5f) / Mathf.Max(1, plateCount);
+        float y = 1f - 2f * t;
+        float radius = Mathf.Sqrt(Mathf.Max(0f, 1f - y * y));
+        float angle = index * 2.39996323f + seed * 0.0137f;
+        Vector3 center = new Vector3(Mathf.Cos(angle) * radius, y, Mathf.Sin(angle) * radius);
+        Vector3 offset = HashVector(index, seed + 1931);
+        return (center + offset * Mathf.Clamp01(jitter) * 0.48f).normalized;
+    }
+
+    private static bool IsOceanicPlate(int plateId, int seed, float oceanicRatio)
+    {
+        return Hash01(plateId, 0, seed + 2711) < Mathf.Clamp01(oceanicRatio);
+    }
+
+    private static Vector3 HashVector(int value, int seed)
+    {
+        Vector3 vector = new Vector3(
+            Hash01(value, 11, seed) * 2f - 1f,
+            Hash01(value, 23, seed) * 2f - 1f,
+            Hash01(value, 37, seed) * 2f - 1f);
+        return vector.sqrMagnitude > 0.0001f ? vector.normalized : Vector3.up;
+    }
+
+    private static float Hash01(int x, int y, int seed)
+    {
+        uint hash = (uint)NoiseGenerator.Hash(x, y, seed);
+        return (hash & 0x00FFFFFF) / 16777215f;
+    }
+
+    private static float Smooth01(float value)
+    {
+        float t = Mathf.Clamp01(value);
+        return t * t * (3f - 2f * t);
     }
 
     private static float SignedNoise(Vector3 direction, float scale, int seed)
