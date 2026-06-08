@@ -67,6 +67,8 @@ public class CubeSphereMeshBuilder : MonoBehaviour
         Vector3[] normals = new Vector3[vertices.Length];
         Color[] colors = new Color[vertices.Length];
         Vector2[] uvs = new Vector2[vertices.Length];
+        Vector2[] tectonicUv2 = new Vector2[vertices.Length];
+        Vector2[] tectonicUv3 = new Vector2[vertices.Length];
         int[] triangles = new int[chunkResolution * chunkResolution * 6];
 
         int triIndex = 0;
@@ -85,6 +87,9 @@ public class CubeSphereMeshBuilder : MonoBehaviour
                 normals[index] = direction;
                 colors[index] = sample.biome != null ? Color.Lerp(sample.biome.primaryColor, sample.biome.secondaryColor, sample.noise.heightNoise) : Color.white;
                 uvs[index] = new Vector2(faceU, faceV);
+                // UV2: x = continental shelf, y = ocean basin. UV3: x = tectonic mountains, y = island arcs.
+                tectonicUv2[index] = new Vector2(sample.noise.continentalShelfMask, sample.noise.oceanBasinMask);
+                tectonicUv3[index] = new Vector2(sample.noise.tectonicMountainMask, sample.noise.islandArcMask);
 
                 if (x < chunkResolution && y < chunkResolution)
                 {
@@ -112,6 +117,8 @@ public class CubeSphereMeshBuilder : MonoBehaviour
         mesh.normals = normals;
         mesh.colors = colors;
         mesh.uv = uvs;
+        mesh.uv2 = tectonicUv2;
+        mesh.uv3 = tectonicUv3;
         mesh.triangles = triangles;
         mesh.RecalculateBounds();
         return mesh;
